@@ -1,9 +1,16 @@
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from models import Products
 from database import SessionLocal, engine
 import database_models
 from sqlalchemy.orm import Session
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins = ["http://localhost:3000"],
+    allow_methods = ["*"]
+)
 
 database_models.Base.metadata.create_all(bind = engine)
 
@@ -45,11 +52,14 @@ def db_init():
 
 db_init()
 
+def serialize_product(product):
+    return Products.model_validate(product).model_dump(by_alias=True)
+
 @app.get('/products')
 @app.get('/products/')
 def get_all_products(db : Session = Depends(get_db) ):
     db_products = db.query(database_models.Products).all()
-    return [Products.model_validate(product) for product in db_products]
+    return [serialize_product(product) for product in db_products]
 
 @app.get('/products/{id}')
 @app.get('/product/{id}')
@@ -57,7 +67,7 @@ def get_product_by_id(id : int, db : Session = Depends(get_db)):
     product = db.get(database_models.Products, id)
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-    return Products.model_validate(product)
+    return serialize_product(product)
 
 @app.post('/products', status_code=status.HTTP_201_CREATED)
 @app.post('/products/')
@@ -69,7 +79,7 @@ def add_product(product : Products, db : Session = Depends(get_db)):
     db.add(db_product)
     db.commit()
     db.refresh(db_product)
-    return Products.model_validate(db_product)
+    return serialize_product(db_product)
 
 @app.put('/products/{id}')
 @app.put('/product/{id}')
@@ -81,7 +91,7 @@ def update_product(id : int, product : Products, db : Session = Depends(get_db))
         setattr(db_product, field, value)
     db.commit()
     db.refresh(db_product)
-    return Products.model_validate(db_product)
+    return serialize_product(db_product)
 
 @app.delete('/products/{id}')
 @app.delete('/product/{id}')
